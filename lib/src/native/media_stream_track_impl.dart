@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:webrtc_interface/webrtc_interface.dart';
 
@@ -21,6 +22,8 @@ class MediaStreamTrackNative extends MediaStreamTrack {
   bool _enabled;
 
   bool _muted = false;
+
+  StreamSubscription<dynamic>? _frameStreamSubscription;
 
   @override
   set enabled(bool enabled) {
@@ -86,6 +89,35 @@ class MediaStreamTrackNative extends MediaStreamTrack {
     return File(filePath.path + '/captureFrame.png')
         .readAsBytes()
         .then((value) => value.buffer);
+  }
+
+  Future<void> startFrameStream(Function(Uint8List frame) onFrame) async {
+    await WebRTC.invokeMethod(
+      'startFrameStream',
+      <String, dynamic>{'trackId': id},
+    );
+
+    final cameraEventChannel =
+        EventChannel('FlutterWebRTC.Method/frameStream/$id');
+
+    _frameStreamSubscription =
+        cameraEventChannel.receiveBroadcastStream().listen((dynamic frameData) {
+      if (frameData is List<int>) {
+        onFrame(Uint8List.fromList(frameData));
+      } else if (frameData is Uint8List) {
+        onFrame(frameData);
+      }
+    });
+  }
+
+  Future<void> stopFrameStream() async {
+    await WebRTC.invokeMethod(
+      'stopFrameStream',
+      <String, dynamic>{'trackId': id},
+    );
+
+    await _frameStreamSubscription?.cancel();
+    _frameStreamSubscription = null;
   }
 
   @override
