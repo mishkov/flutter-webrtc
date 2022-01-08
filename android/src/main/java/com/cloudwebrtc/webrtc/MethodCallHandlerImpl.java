@@ -537,6 +537,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
           String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
           EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
           frameStreamChannel.setStreamHandler(frameStream);
+          result.success(null);
         } else {
           resultError("startFrameStream", "Track is null", result);
         }
@@ -548,6 +549,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
           String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
           EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
           frameStreamChannel.setStreamHandler(null);
+          result.success(null);
         } else {
           resultError("stopFrameStream", "Track is null", result);
         }
