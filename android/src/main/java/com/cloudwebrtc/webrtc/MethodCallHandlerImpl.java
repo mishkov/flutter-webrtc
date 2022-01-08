@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 
 import com.cloudwebrtc.webrtc.record.AudioChannel;
 import com.cloudwebrtc.webrtc.record.FrameCapturer;
+import com.cloudwebrtc.webrtc.record.FrameStream;
 import com.cloudwebrtc.webrtc.utils.AnyThreadResult;
 import com.cloudwebrtc.webrtc.utils.ConstraintsArray;
 import com.cloudwebrtc.webrtc.utils.ConstraintsMap;
@@ -511,7 +512,7 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         getUserMediaImpl.stopRecording(recorderId);
         result.success(null);
         break;
-      case "captureFrame":
+      case "captureFrame": {
         String path = call.argument("path");
         String videoTrackId = call.argument("trackId");
         if (videoTrackId != null) {
@@ -525,6 +526,33 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
           resultError("captureFrame", "Track is null", result);
         }
         break;
+      }
+      case "startFrameStream": {
+        String videoTrackId = call.argument("trackId");
+        if (videoTrackId != null) {
+          MediaStreamTrack track = getTrackForId(videoTrackId);
+
+          FrameStream frameStream = new FrameStream((VideoTrack) track);
+
+          String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
+          EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
+          frameStreamChannel.setStreamHandler(frameStream);
+        } else {
+          resultError("startFrameStream", "Track is null", result);
+        }
+        break;
+      }
+      case "stopFrameStream": {
+        String videoTrackId = call.argument("trackId");
+        if (videoTrackId != null) {
+          String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
+          EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
+          frameStreamChannel.setStreamHandler(null);
+        } else {
+          resultError("stopFrameStream", "Track is null", result);
+        }
+        break;
+      }
       case "getLocalDescription": {
         String peerConnectionId = call.argument("peerConnectionId");
         PeerConnection peerConnection = getPeerConnection(peerConnectionId);
