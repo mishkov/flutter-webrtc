@@ -6,6 +6,8 @@ import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 
@@ -24,6 +26,8 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
     private final VideoTrack videoTrack;
     private EventChannel.EventSink sink;
 
+    private final Handler uiThreadHandler = new Handler(Looper.getMainLooper());
+
     public FrameStream(VideoTrack track) {
         videoTrack = track;
     }
@@ -41,7 +45,7 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
 
             switch (videoFrame.getRotation()) {
                 case 0:
-                    sink.success(outputStream.toByteArray());
+                    uiThreadHandler.post(() -> sink.success(outputStream.toByteArray()));
                     break;
                 case 90:
                 case 180:
@@ -57,16 +61,16 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
                     ByteArrayOutputStream rotatedOutputStream = new ByteArrayOutputStream();
                     rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
 
-                    sink.success(rotatedOutputStream.toByteArray());
+                    uiThreadHandler.post(() -> sink.success(rotatedOutputStream.toByteArray()));
                     break;
                 default:
                     // Rotation is checked to always be 0, 90, 180 or 270 by VideoFrame
                     throw new RuntimeException("Invalid rotation");
             }
         } catch (IOException io) {
-            sink.error("IOException", io.getLocalizedMessage(), io);
+            uiThreadHandler.post(() -> sink.error("IOException", io.getLocalizedMessage(), io));
         } catch (IllegalArgumentException iae) {
-            sink.error("IllegalArgumentException", iae.getLocalizedMessage(), iae);
+            uiThreadHandler.post(() -> sink.error("IllegalArgumentException", iae.getLocalizedMessage(), iae));
         }
     }
 
