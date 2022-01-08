@@ -6,39 +6,72 @@ import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.YuvImage;
-import android.os.Handler;
-import android.os.Looper;
+
+import androidx.annotation.NonNull;
 
 import org.webrtc.VideoFrame;
 import org.webrtc.VideoSink;
 import org.webrtc.VideoTrack;
 import org.webrtc.YuvHelper;
 
-import java.io.File;
-import java.io.FileOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 
-import io.flutter.plugin.common.MethodChannel;
+import io.flutter.plugin.common.EventChannel;
 
-public class FrameStream implements VideoSink {
-    private VideoTrack videoTrack;
-    private File file;
-    private final MethodChannel.Result callback;
-    private boolean gotFrame = false;
+public class FrameStream implements VideoSink, EventChannel.StreamHandler {
+    private final VideoTrack videoTrack;
+    private EventChannel.EventSink sink;
 
-    public FrameStream(VideoTrack track, File file, MethodChannel.Result callback) {
+    public FrameStream(VideoTrack track) {
         videoTrack = track;
-        this.file = file;
-        this.callback = callback;
-        track.addSink(this);
     }
 
     @Override
     public void onFrame(VideoFrame videoFrame) {
-        if (gotFrame)
-            return;
-        gotFrame = true;
+        YuvImage yuvImage = videoFrameToYuvImage(videoFrame);
+
+        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            yuvImage.compressToJpeg(
+                    new Rect(0, 0, yuvImage.getWidth(), yuvImage.getHeight()),
+                    100,
+                    outputStream
+            );
+
+            switch (videoFrame.getRotation()) {
+                case 0:
+                    sink.success(outputStream.toByteArray());
+                    break;
+                case 90:
+                case 180:
+                case 270:
+                    byte[] bytes = outputStream.toByteArray();
+                    Bitmap original = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+
+                    Matrix matrix = new Matrix();
+                    matrix.postRotate(videoFrame.getRotation());
+
+                    Bitmap rotated = Bitmap.createBitmap(original, 0, 0, original.getWidth(), original.getHeight(), matrix, true);
+
+                    ByteArrayOutputStream rotatedOutputStream = new ByteArrayOutputStream();
+                    rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
+
+                    sink.success(rotatedOutputStream.toByteArray());
+                    break;
+                default:
+                    // Rotation is checked to always be 0, 90, 180 or 270 by VideoFrame
+                    throw new RuntimeException("Invalid rotation");
+            }
+        } catch (IOException io) {
+            sink.error("IOException", io.getLocalizedMessage(), io);
+        } catch (IllegalArgumentException iae) {
+            sink.error("IllegalArgumentException", iae.getLocalizedMessage(), iae);
+        }
+    }
+
+    @NonNull
+    private YuvImage videoFrameToYuvImage(@NonNull VideoFrame videoFrame) {
         videoFrame.retain();
         VideoFrame.Buffer buffer = videoFrame.getBuffer();
         VideoFrame.I420Buffer i420Buffer = buffer.toI420();
@@ -65,51 +98,18 @@ public class FrameStream implements VideoSink {
                 strides
         );
         videoFrame.release();
-        new Handler(Looper.getMainLooper()).post(() -> {
-            videoTrack.removeSink(this);
-        });
-        try {
-            if (!file.exists()) {
-                //noinspection ResultOfMethodCallIgnored
-                file.getParentFile().mkdirs();
-                //noinspection ResultOfMethodCallIgnored
-                file.createNewFile();
-            }
-        } catch (IOException io) {
-            callback.error("IOException", io.getLocalizedMessage(), io);
-            return;
-        }
-        try (FileOutputStream outputStream = new FileOutputStream(file)) {
-            yuvImage.compressToJpeg(
-                    new Rect(0, 0, width, height),
-                    100,
-                    outputStream
-            );
-            switch (videoFrame.getRotation()) {
-                case 0:
-                    break;
-                case 90:
-                case 180:
-                case 270:
-                    Bitmap original = BitmapFactory.decodeFile(file.toString());
-                    Matrix matrix = new Matrix();
-                    matrix.postRotate(videoFrame.getRotation());
-                    Bitmap rotated = Bitmap.createBitmap(original, 0, 0, original.getWidth(), original.getHeight(), matrix, true);
-                    FileOutputStream rotatedOutputStream = new FileOutputStream(file);
-                    rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
-                    break;
-                default:
-                    // Rotation is checked to always be 0, 90, 180 or 270 by VideoFrame
-                    throw new RuntimeException("Invalid rotation");
-            }
-            callback.success(null);
-        } catch (IOException io) {
-            callback.error("IOException", io.getLocalizedMessage(), io);
-        } catch (IllegalArgumentException iae) {
-            callback.error("IllegalArgumentException", iae.getLocalizedMessage(), iae);
-        } finally {
-            file = null;
-        }
+
+        return yuvImage;
     }
 
+    @Override
+    public void onListen(Object arguments, EventChannel.EventSink events) {
+        sink = events;
+        videoTrack.addSink(this);
+    }
+
+    @Override
+    public void onCancel(Object arguments) {
+        videoTrack.removeSink(this);
+    }
 }
