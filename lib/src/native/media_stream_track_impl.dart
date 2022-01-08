@@ -91,6 +91,7 @@ class MediaStreamTrackNative extends MediaStreamTrack {
         .then((value) => value.buffer);
   }
 
+  @override
   Future<void> startFrameStream(Function(Uint8List frame) onFrame) async {
     await WebRTC.invokeMethod(
       'startFrameStream',
@@ -110,6 +111,7 @@ class MediaStreamTrackNative extends MediaStreamTrack {
     });
   }
 
+  @override
   Future<void> stopFrameStream() async {
     await WebRTC.invokeMethod(
       'stopFrameStream',
