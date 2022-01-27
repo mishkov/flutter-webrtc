@@ -1,102 +1,84 @@
 package com.cloudwebrtc.webrtc.record;
 
-import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
+import static com.google.mlkit.vision.face.FaceDetectorOptions.LANDMARK_MODE_ALL;
+
 import android.graphics.ImageFormat;
-import android.graphics.Matrix;
-import android.graphics.Rect;
 import android.graphics.YuvImage;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.google.android.gms.tasks.OnFailureListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.mlkit.vision.common.InputImage;
+import com.google.mlkit.vision.face.Face;
+import com.google.mlkit.vision.face.FaceDetection;
+import com.google.mlkit.vision.face.FaceDetector;
+import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import org.webrtc.VideoFrame;
 import org.webrtc.VideoSink;
 import org.webrtc.VideoTrack;
 import org.webrtc.YuvHelper;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
 
 import io.flutter.plugin.common.EventChannel;
 
-public class FrameStream implements VideoSink, EventChannel.StreamHandler {
+public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
     private final VideoTrack videoTrack;
     private EventChannel.EventSink sink;
     private boolean inProgress = false;
 
-    private final Handler uiThreadHandler = new Handler(Looper.getMainLooper());
+    private final FaceDetectorOptions realTimeOpts =
+            new FaceDetectorOptions.Builder()
+                    .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                    .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                    .setClassificationMode(LANDMARK_MODE_ALL)
+                    .build();
+    private final FaceDetector detector = FaceDetection.getClient(realTimeOpts);
+    private final OnFacesListener onFacesListener = new OnFacesListener();
+    private final OnErrorListener onErrorListener = new OnErrorListener();
 
-    private static final String TAG = "FrameStream";
+    private static final String TAG = "EyesOpenStream";
 
-    public FrameStream(VideoTrack track) {
+    public EyesOpenStream(VideoTrack track) {
         videoTrack = track;
+        Log.d(TAG, "Enter to constructor");
     }
 
     @Override
     public void onFrame(VideoFrame videoFrame) {
         if (inProgress) {
-            videoFrame.release();
             return;
         }
         inProgress = true;
 
         YuvImage yuvImage = videoFrameToYuvImage(videoFrame);
 
-        try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            yuvImage.compressToJpeg(
-                    new Rect(0, 0, yuvImage.getWidth(), yuvImage.getHeight()),
-                    100,
-                    outputStream
-            );
+        Log.d(TAG, "The resolution of frame: " + yuvImage.getWidth() + " x " + yuvImage.getHeight());
 
-            Log.d(TAG, "Size of " + yuvImage.getYuvFormat() + " " + videoFrame.getRotation() + " image is " + yuvImage.getWidth() + " x " + yuvImage.getHeight());
-
-            switch (videoFrame.getRotation()) {
-                case 0:
-                    uiThreadHandler.post(() -> sink.success(outputStream.toByteArray()));
-                    break;
-                case 90:
-                case 180:
-                case 270:
-                    byte[] bytes = outputStream.toByteArray();
-                    Bitmap original = BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
-
-                    Matrix matrix = new Matrix();
-                    matrix.postRotate(videoFrame.getRotation());
-
-                    Bitmap rotated = Bitmap.createBitmap(original, 0, 0, original.getWidth(), original.getHeight(), matrix, true);
+        InputImage inputImage = InputImage.fromByteArray(
+                yuvImage.getYuvData(),
+                yuvImage.getWidth(),
+                yuvImage.getHeight(),
+                videoFrame.getRotation(),
+                yuvImage.getYuvFormat()
+        );
 
 
-                    try (ByteArrayOutputStream rotatedOutputStream = new ByteArrayOutputStream()) {
-                        rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
 
-                        uiThreadHandler.post(() -> sink.success(rotatedOutputStream.toByteArray()));
-                    }
+        detector.process(inputImage)
+                .addOnSuccessListener(onFacesListener)
+                .addOnFailureListener(onErrorListener);
 
-                    break;
-                default:
-                    // Rotation is checked to always be 0, 90, 180 or 270 by VideoFrame
-                    throw new RuntimeException("Invalid rotation");
-            }
-        } catch (IOException io) {
-            uiThreadHandler.post(() -> sink.error("IOException", io.getLocalizedMessage(), io));
-        } catch (IllegalArgumentException iae) {
-            uiThreadHandler.post(() -> sink.error("IllegalArgumentException", iae.getLocalizedMessage(), iae));
-        } finally {
-            inProgress = false;
-        }
     }
 
     @NonNull
     private YuvImage videoFrameToYuvImage(@NonNull VideoFrame videoFrame) {
-        videoFrame.retain();
-        VideoFrame.Buffer buffer = videoFrame.getBuffer();
-        videoFrame.release();
-        VideoFrame.I420Buffer i420Buffer = buffer.toI420();
+        VideoFrame.I420Buffer i420Buffer = videoFrame.getBuffer().toI420();
         ByteBuffer y = i420Buffer.getDataY();
         ByteBuffer u = i420Buffer.getDataU();
         ByteBuffer v = i420Buffer.getDataV();
@@ -107,6 +89,7 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
                 i420Buffer.getStrideU(),
                 i420Buffer.getStrideV()
         };
+        i420Buffer.release();
         final int chromaWidth = (width + 1) / 2;
         final int chromaHeight = (height + 1) / 2;
         final int minSize = width * height + chromaWidth * chromaHeight * 2;
@@ -124,12 +107,57 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
 
     @Override
     public void onListen(Object arguments, EventChannel.EventSink events) {
+        Log.d(TAG, "onListen was called");
         sink = events;
         videoTrack.addSink(this);
     }
 
     @Override
     public void onCancel(Object arguments) {
+        Log.d(TAG, "onCancel was called");
         videoTrack.removeSink(this);
+    }
+
+    private void postResult(boolean eyesOpen) {
+        sink.success(eyesOpen);
+        inProgress = false;
+
+    }
+
+    private void postError(String message, @Nullable Object details) {
+        final String DETECT_EXCEPTION_CODE = "DetectException";
+        sink.error(DETECT_EXCEPTION_CODE, message, details);
+        inProgress = false;
+    }
+
+    private void postError(String message) {
+        postError(message, null);
+    }
+
+    private class OnFacesListener implements OnSuccessListener<List<Face>> {
+        @Override
+        public void onSuccess(@NonNull List<Face> faces) {
+            boolean onlyOneFace = faces.size() == 1;
+            if (onlyOneFace) {
+                Float leftEyeOpen = faces.get(0).getLeftEyeOpenProbability();
+                Float rightEyeOpen = faces.get(0).getRightEyeOpenProbability();
+                if ((leftEyeOpen != null) && (rightEyeOpen != null)) {
+                    final double THRESHOLD = 0.6;
+                    boolean eyesOpen = (leftEyeOpen > THRESHOLD) && (rightEyeOpen > THRESHOLD);
+                    postResult(eyesOpen);
+                } else {
+                    postError("getLeftEyeOpenProbability or getRightEyeOpenProbability returned Null");
+                }
+            } else {
+                postError("Zero faces or more than 1 face on frame", faces.size());
+            }
+        }
+    }
+
+    private class OnErrorListener implements OnFailureListener {
+        @Override
+        public void onFailure(@NonNull Exception e) {
+            postError(e.getLocalizedMessage(), e);
+        }
     }
 }
