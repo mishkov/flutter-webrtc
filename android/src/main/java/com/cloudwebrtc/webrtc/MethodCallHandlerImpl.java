@@ -13,18 +13,16 @@ import androidx.annotation.Nullable;
 
 import com.cloudwebrtc.webrtc.record.AudioChannel;
 import com.cloudwebrtc.webrtc.record.FrameCapturer;
-import com.cloudwebrtc.webrtc.record.FrameStream;
+import com.cloudwebrtc.webrtc.record.EyesOpenStream;
 import com.cloudwebrtc.webrtc.utils.AnyThreadResult;
 import com.cloudwebrtc.webrtc.utils.ConstraintsArray;
 import com.cloudwebrtc.webrtc.utils.ConstraintsMap;
 import com.cloudwebrtc.webrtc.utils.EglUtils;
 import com.cloudwebrtc.webrtc.utils.ObjectType;
-import com.cloudwebrtc.webrtc.SimulcastVideoEncoderFactoryWrapper;
 
 import org.webrtc.AudioTrack;
 import org.webrtc.CryptoOptions;
 import org.webrtc.DefaultVideoDecoderFactory;
-import org.webrtc.DefaultVideoEncoderFactory;
 import org.webrtc.DtmfSender;
 import org.webrtc.EglBase;
 import org.webrtc.IceCandidate;
@@ -527,31 +525,31 @@ public class MethodCallHandlerImpl implements MethodCallHandler, StateProvider {
         }
         break;
       }
-      case "startFrameStream": {
+      case "startEyesOpenStream": {
         String videoTrackId = call.argument("trackId");
         if (videoTrackId != null) {
           MediaStreamTrack track = getTrackForId(videoTrackId);
 
-          FrameStream frameStream = new FrameStream((VideoTrack) track);
+          EyesOpenStream eyesOpenStream = new EyesOpenStream((VideoTrack) track);
 
-          String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
-          EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
-          frameStreamChannel.setStreamHandler(frameStream);
+          String startEyesOpenStreamName = "FlutterWebRTC.Method/eyesOpenStream/" + videoTrackId;
+          EventChannel eyesOpenStreamChannel = new EventChannel(messenger, startEyesOpenStreamName);
+          eyesOpenStreamChannel.setStreamHandler(eyesOpenStream);
           result.success(null);
         } else {
-          resultError("startFrameStream", "Track is null", result);
+          resultError("startEyesOpenStream", "Track is null", result);
         }
         break;
       }
-      case "stopFrameStream": {
+      case "stopEyesOpenStream": {
         String videoTrackId = call.argument("trackId");
         if (videoTrackId != null) {
-          String frameStreamName = "FlutterWebRTC.Method/frameStream/" + videoTrackId;
-          EventChannel frameStreamChannel = new EventChannel(messenger, frameStreamName);
-          frameStreamChannel.setStreamHandler(null);
+          String eyesOpenStreamName = "FlutterWebRTC.Method/eyesOpenStream/" + videoTrackId;
+          EventChannel eyesOpenStreamChannel = new EventChannel(messenger, eyesOpenStreamName);
+          eyesOpenStreamChannel.setStreamHandler(null);
           result.success(null);
         } else {
-          resultError("stopFrameStream", "Track is null", result);
+          resultError("stopEyesOpenStream", "Track is null", result);
         }
         break;
       }
