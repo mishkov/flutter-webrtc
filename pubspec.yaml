@@ -3,16 +3,23 @@ description: Flutter WebRTC plugin for iOS/Android/Destkop/Web, based on GoogleW
 version: 0.8.0
 homepage: https://github.com/cloudwebrtc/flutter-webrtc
 environment:
-  sdk: '>=2.12.0 <3.0.0'
-  flutter: '>=1.22.0'
+  sdk: ">=2.12.0 <3.0.0"
+  flutter: ">=1.22.0"
+publish_to: none
 
 dependencies:
-  dart_webrtc: ^1.0.1
+  dart_webrtc:
+    git:
+      url: https://github.com/mishkov/dart-webrtc.git
+      ref: eyes-open-stream
   flutter:
     sdk: flutter
   path_provider: ^2.0.2
-  webrtc_interface: ^1.0.1
-  
+  webrtc_interface:
+    git:
+      url: https://github.com/mishkov/webrtc-interface.git
+      ref: eyes-open-stream
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
