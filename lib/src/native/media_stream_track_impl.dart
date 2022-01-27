@@ -92,29 +92,22 @@ class MediaStreamTrackNative extends MediaStreamTrack {
   }
 
   @override
-  Future<void> startFrameStream(Function(Uint8List frame) onFrame) async {
+  Future<Stream> startEyesOpenStream() async {
     await WebRTC.invokeMethod(
-      'startFrameStream',
+      'startEyesOpenStream',
       <String, dynamic>{'trackId': id},
     );
 
     final cameraEventChannel =
-        EventChannel('FlutterWebRTC.Method/frameStream/$id');
+        EventChannel('FlutterWebRTC.Method/eyesOpenStream/$id');
 
-    _frameStreamSubscription =
-        cameraEventChannel.receiveBroadcastStream().listen((dynamic frameData) {
-      if (frameData is List<int>) {
-        onFrame(Uint8List.fromList(frameData));
-      } else if (frameData is Uint8List) {
-        onFrame(frameData);
-      }
-    });
+    return cameraEventChannel.receiveBroadcastStream();
   }
 
   @override
-  Future<void> stopFrameStream() async {
+  Future<void> stopEyesOpenStream() async {
     await WebRTC.invokeMethod(
-      'stopFrameStream',
+      'stopEyesOpenStream',
       <String, dynamic>{'trackId': id},
     );
 
