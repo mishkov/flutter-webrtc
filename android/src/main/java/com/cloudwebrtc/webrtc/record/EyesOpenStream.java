@@ -8,6 +8,7 @@ import android.graphics.Rect;
 import android.graphics.YuvImage;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
@@ -25,8 +26,11 @@ import io.flutter.plugin.common.EventChannel;
 public class FrameStream implements VideoSink, EventChannel.StreamHandler {
     private final VideoTrack videoTrack;
     private EventChannel.EventSink sink;
+    private boolean inProgress = false;
 
     private final Handler uiThreadHandler = new Handler(Looper.getMainLooper());
+
+    private static final String TAG = "FrameStream";
 
     public FrameStream(VideoTrack track) {
         videoTrack = track;
@@ -34,6 +38,12 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
 
     @Override
     public void onFrame(VideoFrame videoFrame) {
+        if (inProgress) {
+            videoFrame.release();
+            return;
+        }
+        inProgress = true;
+
         YuvImage yuvImage = videoFrameToYuvImage(videoFrame);
 
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
@@ -42,6 +52,8 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
                     100,
                     outputStream
             );
+
+            Log.d(TAG, "Size of " + yuvImage.getYuvFormat() + " " + videoFrame.getRotation() + " image is " + yuvImage.getWidth() + " x " + yuvImage.getHeight());
 
             switch (videoFrame.getRotation()) {
                 case 0:
@@ -58,10 +70,13 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
 
                     Bitmap rotated = Bitmap.createBitmap(original, 0, 0, original.getWidth(), original.getHeight(), matrix, true);
 
-                    ByteArrayOutputStream rotatedOutputStream = new ByteArrayOutputStream();
-                    rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
 
-                    uiThreadHandler.post(() -> sink.success(rotatedOutputStream.toByteArray()));
+                    try (ByteArrayOutputStream rotatedOutputStream = new ByteArrayOutputStream()) {
+                        rotated.compress(Bitmap.CompressFormat.JPEG, 100, rotatedOutputStream);
+
+                        uiThreadHandler.post(() -> sink.success(rotatedOutputStream.toByteArray()));
+                    }
+
                     break;
                 default:
                     // Rotation is checked to always be 0, 90, 180 or 270 by VideoFrame
@@ -71,6 +86,8 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
             uiThreadHandler.post(() -> sink.error("IOException", io.getLocalizedMessage(), io));
         } catch (IllegalArgumentException iae) {
             uiThreadHandler.post(() -> sink.error("IllegalArgumentException", iae.getLocalizedMessage(), iae));
+        } finally {
+            inProgress = false;
         }
     }
 
@@ -78,6 +95,7 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
     private YuvImage videoFrameToYuvImage(@NonNull VideoFrame videoFrame) {
         videoFrame.retain();
         VideoFrame.Buffer buffer = videoFrame.getBuffer();
+        videoFrame.release();
         VideoFrame.I420Buffer i420Buffer = buffer.toI420();
         ByteBuffer y = i420Buffer.getDataY();
         ByteBuffer u = i420Buffer.getDataU();
@@ -94,16 +112,14 @@ public class FrameStream implements VideoSink, EventChannel.StreamHandler {
         final int minSize = width * height + chromaWidth * chromaHeight * 2;
         ByteBuffer yuvBuffer = ByteBuffer.allocateDirect(minSize);
         YuvHelper.I420ToNV12(y, strides[0], v, strides[2], u, strides[1], yuvBuffer, width, height);
-        YuvImage yuvImage = new YuvImage(
+
+        return new YuvImage(
                 yuvBuffer.array(),
                 ImageFormat.NV21,
                 width,
                 height,
                 strides
         );
-        videoFrame.release();
-
-        return yuvImage;
     }
 
     @Override

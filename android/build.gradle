@@ -54,5 +54,8 @@ dependencies {
     implementation 'androidx.annotation:annotation:1.3.0'
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
 
-    api "io.flutter:flutter_embedding_debug:1.0.0-d3ea636dc5d16b56819f3266241e1f708979c233"
+    implementation 'com.google.mlkit:face-detection:16.1.3'
+
+    // If you see very much red underlined "io.flutter.*" imports then try to uncomment this line
+    // api "io.flutter:flutter_embedding_debug:1.0.0-d3ea636dc5d16b56819f3266241e1f708979c233"
 }
