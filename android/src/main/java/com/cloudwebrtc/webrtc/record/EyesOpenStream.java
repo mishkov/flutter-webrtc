@@ -60,6 +60,7 @@ public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
         YuvImage yuvImage = videoFrameToYuvImage(videoFrame);
 
         int frameRotation;
+        System.out.println("isRunning on emulator = " + isRunningOnEmulator());
         if (isRunningOnEmulator()) {
             frameRotation = increaseDegreeBy90(videoFrame.getRotation());
         } else {
