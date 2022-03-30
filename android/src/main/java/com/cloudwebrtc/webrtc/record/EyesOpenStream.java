@@ -62,7 +62,7 @@ public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
         int frameRotation;
         System.out.println("isRunning on emulator = " + isRunningOnEmulator());
         if (isRunningOnEmulator()) {
-            frameRotation = increaseDegreeBy90(videoFrame.getRotation());
+            frameRotation = decreaseDegreeBy90(videoFrame.getRotation());
         } else {
             frameRotation = videoFrame.getRotation();
         }
@@ -103,14 +103,14 @@ public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
                 || Build.PRODUCT.contains("simulator");
     }
 
-    private int increaseDegreeBy90(int degree) {
+    private int decreaseDegreeBy90(int degree) {
         if (!isDegreeCorrect(degree)) throw new ArithmeticException("The degree must be in range 0..360");
 
-        int increasedDegree = degree + 90;
-        if (increasedDegree > 360) {
-            increasedDegree -= 360;
+        int decreasedDegree = degree - 90;
+        if (decreasedDegree < 0) {
+            decreasedDegree += 360;
         }
-        return  increasedDegree;
+        return  decreasedDegree;
     }
 
     private boolean isDegreeCorrect(int degree) {
