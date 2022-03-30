@@ -4,6 +4,7 @@ import static com.google.mlkit.vision.face.FaceDetectorOptions.LANDMARK_MODE_ALL
 
 import android.graphics.ImageFormat;
 import android.graphics.YuvImage;
+import android.os.Build;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -58,13 +59,18 @@ public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
 
         YuvImage yuvImage = videoFrameToYuvImage(videoFrame);
 
-        Log.d(TAG, "The resolution of frame: " + yuvImage.getWidth() + " x " + yuvImage.getHeight());
+        int frameRotation;
+        if (isRunningOnEmulator()) {
+            frameRotation = increaseDegreeBy90(videoFrame.getRotation());
+        } else {
+            frameRotation = videoFrame.getRotation();
+        }
 
         InputImage inputImage = InputImage.fromByteArray(
                 yuvImage.getYuvData(),
                 yuvImage.getWidth(),
                 yuvImage.getHeight(),
-                videoFrame.getRotation(),
+                frameRotation,
                 yuvImage.getYuvFormat()
         );
 
@@ -74,6 +80,24 @@ public class EyesOpenStream implements VideoSink, EventChannel.StreamHandler {
                 .addOnSuccessListener(onFacesListener)
                 .addOnFailureListener(onErrorListener);
 
+    }
+
+    private boolean isRunningOnEmulator() {
+        return Build.FINGERPRINT.contains("generic");
+    }
+
+    private int increaseDegreeBy90(int degree) {
+        if (!isDegreeCorrect(degree)) throw new ArithmeticException("The degree must be in range 0..360");
+
+        int increasedDegree = degree + 90;
+        if (increasedDegree > 360) {
+            increasedDegree -= 360;
+        }
+        return  increasedDegree;
+    }
+
+    private boolean isDegreeCorrect(int degree) {
+        return (0 <= degree) && (degree <= 360);
     }
 
     @NonNull
